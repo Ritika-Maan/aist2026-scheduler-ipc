@@ -30,4 +30,4 @@ class Job:
 
     @property
     def missed(self):
-        return self.finish is not None and self.finish > self.abs_deadline
+        return self.finish is not None and self.finish > self.abs_deadline+ 1e-9
