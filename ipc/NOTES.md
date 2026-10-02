@@ -11,13 +11,21 @@ Run all tests from the repo root: `python -m pytest ipc/tests -v`
 - `messaging.py`   asynchronous/buffered message passing, configurable latency/capacity
 - `interface.py`   A.2 adapter for the co-simulation harness (wraps the above, no logic copied)
 - `example_harness_usage.py`  minimal demo loop showing the call order
+- `INTENSITY_PLACEHOLDER` (interface.py): low/high intensity values; PLACEHOLDERS, not final
 
 ## Conventions
 - Task id = `Task.name` (str). Job identity = `(task.name, release)`.
   Always pass the same `release` value you gave to `on_job_release`.
 - Lower priority number / earlier deadline wins.
-- Message-passing overhead goes into WCET (`inflate_wcet`, latency read from the config).
-  Lock BLOCKING is never added to WCET: it is measured (blocking_events / job.blocking).
+- U is defined on the generated TOTAL WCET (C'). Critical-section time is inside C'
+  (`generate_specs`); message overhead is carved out of C' by `split_wcet` /
+  `message_passing_tasks`. Lock BLOCKING is never added to WCET: it is measured
+  (blocking_events / job.blocking).
+- CONSEQUENCE: with all overhead inside a fixed C', the message-passing schedule is the same
+  for every latency value (it equals plain core), so a latency sweep would change nothing.
+  For the sweep use `baseline_latency=L0`: m*L0 stays inside C', and only the excess
+  m*(L-L0) is added on top (utilization then rises above target: report effective U).
+  `inflate_wcet` (adds m*L on top for every latency) is the alternative "on top" convention.
 - Blocking time of a job = time it is pending while a running job has a strictly worse
   BASE priority (same definition in sim_ipc.py and interface.py).
 

@@ -111,6 +111,63 @@ def inflate_wcet(tasks, msgs_per_job, msg_cfg=None):
     return out
 
 
+# Intensity levels used so far. PLACEHOLDERS agreed only informally in the team chat:
+# the harness may override them, and the paper must state/justify the final values.
+INTENSITY_PLACEHOLDER = {
+    "low":  dict(n_resources=2, cs_per_job=1, cs_fraction=0.10, msgs_per_job=1),
+    "high": dict(n_resources=2, cs_per_job=4, cs_fraction=0.30, msgs_per_job=4),
+}
+
+
+@dataclass(frozen=True)
+class WcetSplit:
+    """How one task's WCET divides between computation and message passing.
+
+    total   C'  : the WCET the harness generated (U is computed on this)
+    compute     : total - comm, the non-communication part
+    comm        : message overhead carved OUT of total (m * baseline latency)
+    extra       : overhead beyond the baseline latency, ADDED on top (latency sweep only)
+    sim_wcet    : what the scheduler must be given = total + extra
+    """
+    task_name: str
+    total: float
+    compute: float
+    comm: float
+    extra: float
+
+    @property
+    def sim_wcet(self):
+        return self.total + self.extra
+
+
+def split_wcet(task, msgs_per_job, msg_cfg, baseline_latency=None):
+    """Split `task.wcet` (the generated total C') into compute and message overhead.
+
+    * baseline_latency=None: all overhead m*L is inside C' (extra = 0). The schedule
+      is then IDENTICAL for every latency value: latency cannot change miss rates.
+    * baseline_latency=L0: the baseline overhead m*L0 is inside C'; if the configured
+      latency L > L0, the additional m*(L-L0) is added on top (utilization rises above
+      target). Use this for a latency sweep. L < L0 is rejected.
+    Raises ValueError if the carved-out overhead leaves no computation time."""
+    m = msgs_per_job.get(task.name, 0) if isinstance(msgs_per_job, dict) else msgs_per_job
+    L = message_overhead(msg_cfg)
+    base = L if baseline_latency is None else baseline_latency
+    if L < base - EPS:
+        raise ValueError(f"latency {L} is below baseline_latency {base}")
+    comm, extra = m * base, m * (L - base)
+    if comm >= task.wcet - EPS:
+        raise ValueError(f"{task.name}: message overhead {comm} leaves no compute time "
+                         f"in WCET {task.wcet}")
+    return WcetSplit(task.name, task.wcet, task.wcet - comm, comm, extra)
+
+
+def message_passing_tasks(tasks, msgs_per_job, msg_cfg, baseline_latency=None):
+    """Apply split_wcet to every task. Returns (task copies with wcet = sim_wcet,
+    {task_name: WcetSplit}). The input tasks are not modified."""
+    splits = {t.name: split_wcet(t, msgs_per_job, msg_cfg, baseline_latency) for t in tasks}
+    return [replace(t, wcet=splits[t.name].sim_wcet) for t in tasks], splits
+
+
 class IPCInterface:
     def __init__(self, tasks, scheduler, ipc="shared_memory", protocol=None,
                  specs=None, msg_cfg=None):
