@@ -69,3 +69,27 @@ Switching scheduler / IPC / protocol only changes constructor arguments.
 - PIP and ICPP+EDF: ICPP is fixed-priority only and raises ValueError under EDF; use SRP for EDF.
 - Message passing in the baseline is asynchronous/buffered; `size` is recorded but latency is flat.
 - Synchronous (rendezvous) messaging is NOT implemented.
+
+## Message latency semantics (CPU time vs transit delay)
+Two different things can be called "latency":
+- CPU cost: send/receive copy and kernel path executed on the processor. It consumes
+  processor time, so it belongs INSIDE WCET and counts toward U.
+- Transit delay: time before the receiver may use the data while the CPU is free. It does
+  NOT change U; it would delay the receiver (end-to-end pipeline latency).
+
+What the code does today: the configured `latency` is treated as CPU cost per message and is
+charged through `split_wcet` / `message_passing_tasks` / `inflate_wcet`. `AsyncMessageChannel`
+also records `available_time = send_time + latency`, but nothing in scheduling uses it
+(tasks are independent periodic tasks with per-task deadlines, no precedence), so transit delay
+currently has NO effect on miss rates. If the paper needs end-to-end speech-pipeline latency,
+add a separate `transit_delay` field to MessagePassingConfig and model the receiver waiting on it.
+
+Latency sweep: `baseline_latency=L0` keeps m*L0 inside C'; only m*(L-L0) is added on top.
+`effective_utilization(tasks, splits)` returns (target_U, effective_U, overload); points with
+effective_U > 1 are marked overload and are not compared directly.
+
+### Constants (fill in from the papers; classify each as CPU cost or transit delay)
+| Constant | Value | Unit / cycles @ clock | Source (paper, section/table) | CPU cost or transit delay? | Used as |
+|---|---|---|---|---|---|
+| L4 IPC | TODO | TODO | TODO | TODO | TODO |
+| Quest-V inter-sandbox communication | TODO | TODO | TODO | TODO | TODO |

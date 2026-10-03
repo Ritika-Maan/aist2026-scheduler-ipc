@@ -11,7 +11,7 @@ from task import Task                                           # noqa: E402
 from schedulers import simulate                                 # noqa: E402
 from messaging import MessagePassingConfig                      # noqa: E402
 from interface import (split_wcet, message_passing_tasks,       # noqa: E402
-                       INTENSITY_PLACEHOLDER)
+                       effective_utilization, INTENSITY_PLACEHOLDER)
 from example_harness_usage import run_cosim                     # noqa: E402
 
 
@@ -93,3 +93,24 @@ def test_intensity_placeholders_are_defined():
     for level in INTENSITY_PLACEHOLDER.values():
         assert {"n_resources", "cs_per_job", "cs_fraction", "msgs_per_job"} <= set(level)
     assert INTENSITY_PLACEHOLDER["high"]["cs_per_job"] > INTENSITY_PLACEHOLDER["low"]["cs_per_job"]
+
+
+def test_effective_utilization_equals_target_at_baseline_and_rises_in_sweep():
+    tasks = mk()
+    cfg0 = MessagePassingConfig(latency=0.1)
+    _, s0 = message_passing_tasks(tasks, 2, cfg0, baseline_latency=0.1)
+    target, eff, over = effective_utilization(tasks, s0)
+    assert eff == pytest.approx(target) and not over          # baseline point == main experiment
+    _, s1 = message_passing_tasks(tasks, 2, MessagePassingConfig(latency=0.5), baseline_latency=0.1)
+    t1, e1, _ = effective_utilization(tasks, s1)
+    assert t1 == pytest.approx(target)
+    assert e1 == pytest.approx(target + sum(2 * 0.4 / t.period for t in tasks))
+
+
+def test_effective_utilization_flags_overload():
+    tasks = [Task("a", 10, 4), Task("b", 15, 6), Task("c", 40, 8)]    # U = 0.4+0.4+0.2 = 1.0 - eps? exactly 1.0
+    tasks[2] = Task("c", 40, 7.6)                                      # U = 0.98
+    _, s = message_passing_tasks(tasks, 2, MessagePassingConfig(latency=0.5), baseline_latency=0.1)
+    _, eff, over = effective_utilization(tasks, s)
+    assert eff > 1 and over
+    assert effective_utilization(tasks)[2] is False

@@ -168,6 +168,20 @@ def message_passing_tasks(tasks, msgs_per_job, msg_cfg, baseline_latency=None):
     return [replace(t, wcet=splits[t.name].sim_wcet) for t in tasks], splits
 
 
+def effective_utilization(tasks, splits=None):
+    """(target_U, effective_U, overload) for a latency-sweep point.
+
+    tasks  : the ORIGINAL tasks (wcet = generated total C')
+    splits : {task_name: WcetSplit} from message_passing_tasks (None = no extra)
+    target_U    = sum(C'/T)
+    effective_U = target_U + sum(extra/T)   (what the scheduler really sees)
+    overload    = effective_U > 1: do not compare such points directly, mark as overload."""
+    target = sum(t.wcet / t.period for t in tasks)
+    extra = sum(splits[t.name].extra / t.period for t in tasks) if splits else 0.0
+    eff = target + extra
+    return target, eff, eff > 1 + EPS
+
+
 class IPCInterface:
     def __init__(self, tasks, scheduler, ipc="shared_memory", protocol=None,
                  specs=None, msg_cfg=None):
