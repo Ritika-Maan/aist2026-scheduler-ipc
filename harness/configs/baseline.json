@@ -1,0 +1,61 @@
+{
+  "settings": {
+    "time_unit": "ms", "base_seed": 2026, "n_task_sets": 50, "n_tasks": 6,
+    "period_grid": [80, 112, 128, 140, 160, 224, 280, 320, 448, 560, 640, 896, 1120],
+    "baseline_latency": 0.01,
+    "intensity": {
+      "low":  {"n_resources": 2, "cs_per_job": 1, "cs_fraction": 0.10, "msgs_per_job": 1},
+      "high": {"n_resources": 2, "cs_per_job": 4, "cs_fraction": 0.30, "msgs_per_job": 4}
+    },
+    "notes": {
+      "intensity values": "PLACEHOLDER (ipc/interface.py INTENSITY_PLACEHOLDER); awaiting team confirmation. cs_fraction = total critical-section time as a fraction of WCET.",
+      "baseline_latency": "PLACEHOLDER 0.01 ms per message (CPU cost, inside WCET). Does not affect baseline schedules (all overhead inside C'); matters only for the post-baseline latency sweep. Awaiting L4/Quest-V constants in ipc/NOTES.md.",
+      "period grid": "HARNESS CHOICE, bounded by D3 ranges (80 ms scale: Park et al. 2022; 160-1120 ms: Banfic et al.). 13 divisors of 4480 ms in [80,1120] so the hyperperiod is exactly 4480 ms; replaced by stage-specific ranges in Step 5. Not a per-stage structure.",
+      "n_tasks": "PLACEHOLDER 6 tasks per set (not specified in the plan); distinct periods per set drawn without replacement.",
+      "horizon": "One hyperperiod of each task set (synchronous release at t=0)."
+    }
+  },
+  "comparisons": [["RMS", "EDF"]],
+  "conditions": [
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.5, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.5, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.5, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.5, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.5, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.5, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.5, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.5, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.6, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.6, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.6, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.6, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.6, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.6, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.6, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.6, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.7, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.7, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.7, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.7, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.7, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.7, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.7, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.7, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.8, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.8, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.8, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.8, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.8, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.8, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.8, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.8, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.9, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "shared_memory", "protocol": "PIP", "utilization": 0.9, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.9, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "shared_memory", "protocol": "SRP", "utilization": 0.9, "intensity": "high"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.9, "intensity": "low"},
+    {"scheduler": "RMS", "ipc": "message_passing", "protocol": null, "utilization": 0.9, "intensity": "high"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.9, "intensity": "low"},
+    {"scheduler": "EDF", "ipc": "message_passing", "protocol": null, "utilization": 0.9, "intensity": "high"}
+  ]
+}
