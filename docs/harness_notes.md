@@ -34,3 +34,18 @@ RMS+SRP / ICPP controls and both sweeps; list extra pairs in `comparisons`.
 
 Run: `python -m harness.cli --config harness/configs/baseline.json --out results`
 Tests: `python -m pytest harness/tests -v`
+
+## Post-baseline controls and sweeps (`harness/configs/extended.json`)
+
+One config = the 40 baseline conditions (unchanged; `--baseline-csv results/baseline.csv` regression-checks
+them to 1e-12) + U = 0.95/0.98 + RMS+SRP and RMS+ICPP controls (arms `RMS+SRP`, `RMS+ICPP`; the
+baseline RMS arm is RMS+PIP) + cs_fraction sweep (tag `csf=<f>`) + latency sweep (tag `lat=<ms>`).
+All are plain dict entries; extra `comparisons` pairs are listed in the config. Sweep points and sweep
+utilizations are harness choices (see config notes), not from the plan or the papers.
+
+Run: `python -m harness.cli --config harness/configs/extended.json --out results/extended --prefix extended --extended --baseline-csv results/baseline.csv`  (about 3 min)
+
+Conventions: a latency-sweep cell is "overload" if effective U > 1 in at least one task set; its miss rate
+is shown but no paired comparison or winner is computed. "vs plain" = shared-memory (or latency-sweep)
+miss rate minus the plain-scheduling (message-passing baseline) miss rate on the same task sets.
+A control "flip" = shared-memory winner scheduler differs from the plain-scheduling winner, both non-tie.
