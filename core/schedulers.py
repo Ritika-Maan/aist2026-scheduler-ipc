@@ -5,7 +5,11 @@ def assign_rms_priorities(tasks):
     """Shorter period = higher priority (0 is highest). Static."""
     for i, t in enumerate(sorted(tasks, key=lambda t: t.period)):
         t.priority = i
-
+        
+def assign_dm_priorities(tasks):
+    """Shorter relative deadline = higher priority. Ties: shorter period, then list order."""
+    for i, t in enumerate(sorted(tasks, key=lambda t: (t.deadline, t.period))):
+        t.priority = i
 
 def simulate(tasks, policy, horizon):
     """Preemptive uniprocessor sim. policy = 'RMS' or 'EDF'. Returns finished jobs."""
@@ -14,8 +18,11 @@ def simulate(tasks, policy, horizon):
         key = lambda j: (j.task.priority, j.release)
     elif policy == "EDF":
         key = lambda j: (j.abs_deadline, j.release)
+    elif policy=="DM":
+        assign_dm_priorities(tasks)
+        key = lambda j: (j.task.priority, j.release)
     else:
-        raise ValueError("policy must be 'RMS' or 'EDF'")
+        raise ValueError("policy must be 'RMS' or 'EDF' or 'DM'")
 
     # generate every job released before the horizon
     releases = []
@@ -56,3 +63,14 @@ def metrics(jobs):
     max_late = max(j.finish - j.abs_deadline for j in jobs)
     return {"jobs": n, "missed": missed,
             "miss_rate": missed / n, "max_lateness": max_late}
+
+
+def job_log(jobs):
+    """One row per job. slack = D - response time; negative means missed."""
+    return [{"task": j.task.name,
+             "release": j.release,
+             "finish": j.finish,
+             "abs_deadline": j.abs_deadline,
+             "response": j.finish - j.release,
+             "slack": j.abs_deadline - j.finish}
+            for j in jobs]
