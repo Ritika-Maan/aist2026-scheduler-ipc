@@ -49,6 +49,7 @@ class Condition:
     arm: str
     tag: str
     overrides: dict
+    d_factor: float = 1.0
 
     def params(self, settings):
         """Intensity values + overrides, with latency defaults filled in."""
@@ -79,8 +80,9 @@ def make_condition(d):
     arm, tag = d.get("arm", d["scheduler"]), d.get("tag", "")
     cid = d.get("id") or "|".join([arm, d["ipc"], str(protocol), f"U{d['utilization']}",
                                    d["intensity"], tag])
+    d_factor = float(d.get("d_factor", 1.0))
     return Condition(cid, d["scheduler"], d["ipc"], protocol, float(d["utilization"]),
-                     d["intensity"], arm, tag, overrides)
+                     d["intensity"], arm, tag, overrides, d_factor)
 
 
 def load_config(path):

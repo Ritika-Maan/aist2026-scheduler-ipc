@@ -52,7 +52,7 @@ def paired_differences(result):
     Returns (summary DataFrame, per-set differences DataFrame)."""
     raw, comps = result.raw, result.settings.comparisons
     summ, diffs = [], []
-    for (ipc, u, inten, tag), cell in raw.groupby(["ipc", "utilization", "intensity", "tag"], sort=True):
+    for (ipc, u, inten, tag, d_factor), cell in raw.groupby(["ipc", "utilization", "intensity", "tag", "d_factor"], sort=True):
         arms = {}
         for arm, g in cell.groupby("arm"):
             if g["condition"].nunique() > 1:
@@ -70,13 +70,13 @@ def paired_differences(result):
             mean_a, mean_b = float(ga["miss_rate"].mean()), float(gb["miss_rate"].mean())
             winner = "tie" if tie else (a if mean_a < mean_b else b)
             overload = bool(ga["overload"].any() or gb["overload"].any())
-            summ.append(dict(ipc=ipc, utilization=u, intensity=inten, tag=tag, arm_a=a, arm_b=b,
+            summ.append(dict(ipc=ipc, utilization=u, intensity=inten, tag=tag, d_factor=d_factor, arm_a=a, arm_b=b,
                              cond_a=ga["condition"].iloc[0], cond_b=gb["condition"].iloc[0],
                              n=n, mean_a=mean_a, mean_b=mean_b, mean_diff=mean, sd_diff=sd,
                              ci_lo=lo, ci_hi=hi, tie=tie, winner="overload" if overload else winner,
                              overload=overload,
                              n_sets_differing=int((np.abs(d) > 1e-12).sum())))
             for si, di in zip(ga["set_index"], d):
-                diffs.append(dict(ipc=ipc, utilization=u, intensity=inten, tag=tag,
+                diffs.append(dict(ipc=ipc, utilization=u, intensity=inten, tag=tag, d_factor=d_factor,
                                   arm_a=a, arm_b=b, set_index=int(si), diff=float(di)))
     return pd.DataFrame(summ), pd.DataFrame(diffs)

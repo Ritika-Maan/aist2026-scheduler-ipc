@@ -48,9 +48,11 @@ def run_one(cond, tasks, set_index, settings):
                 msgs_per_job=p["msgs_per_job"] if cond.ipc == "message_passing" else 0,
                 baseline_latency=p["baseline_latency"] if cond.ipc == "message_passing" else None)
     m = metrics(res.jobs)                                 # core metrics: jobs, missed, miss_rate, max_lateness
+    
     row = dict(condition=cond.id, arm=cond.arm, scheduler=cond.scheduler, ipc=cond.ipc,
                protocol=cond.protocol or "none", utilization=cond.utilization,
                intensity=cond.intensity, tag=cond.tag, set_index=set_index,
+               d_factor=getattr(cond, "d_factor", 1.0),
                jobs=m["jobs"], missed=m["missed"], miss_rate=m["miss_rate"],
                max_lateness=m["max_lateness"], deadlock=res.deadlock,
                target_u=res.target_u, effective_u=res.effective_u, overload=res.overload,
