@@ -25,7 +25,7 @@ for _p in (_HERE, os.path.join(_HERE, "..", "core")):
         sys.path.insert(0, _p)
 
 from task import Job                                   # noqa: E402  (core)
-from schedulers import assign_rms_priorities, metrics  # noqa: E402  (core)
+from schedulers import assign_rms_priorities, assign_dm_priorities, metrics  # noqa: E402  (core)
 from config import EPS, build_events, validate_specs   # noqa: E402
 from protocols import State, make_protocol             # noqa: E402
 
@@ -58,13 +58,15 @@ def _advance_events(job, prot, state):
 
 
 def simulate_ipc(tasks, policy, protocol, specs, horizon):
-    """policy: 'RMS'|'EDF'.  protocol: 'NONE'|'PIP'|'ICPP'|'SRP'.
+    """policy: 'RMS'|'EDF'|'DM'.  protocol: 'NONE'|'PIP'|'ICPP'|'SRP'.
     specs: {task_name: [CriticalSection]} (use {} for no sharing).
     Returns (jobs, info) where info = {'deadlock': bool}."""
     validate_specs(tasks, specs)
     if policy == "RMS":
         assign_rms_priorities(tasks)
-    prot = make_protocol(protocol, policy, specs)
+    elif policy == "DM":
+        assign_dm_priorities(tasks)
+    prot = make_protocol(protocol, "RMS" if policy == "DM" else policy, specs)
     prot.prepare(tasks)
     state = State()
     ready = state.ready

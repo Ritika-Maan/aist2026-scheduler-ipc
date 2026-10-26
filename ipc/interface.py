@@ -44,11 +44,11 @@ for _p in (_HERE, os.path.join(_HERE, "..", "core")):
 from config import EPS, build_events, validate_specs      # noqa: E402
 from protocols import State, make_protocol                # noqa: E402
 from sim_ipc import IPCJob                                # noqa: E402
-from schedulers import assign_rms_priorities              # noqa: E402  (core)
+from schedulers import assign_rms_priorities, assign_dm_priorities  # noqa: E402  (core)
 from messaging import (AsyncMessageChannel,               # noqa: E402
                        MessagePassingConfig, message_overhead)
 
-SCHEDULERS = ("RMS", "EDF")
+SCHEDULERS = ("RMS", "EDF", "DM")
 IPC_MODES = ("shared_memory", "message_passing")
 
 
@@ -185,7 +185,7 @@ def effective_utilization(tasks, splits=None):
 class IPCInterface:
     def __init__(self, tasks, scheduler, ipc="shared_memory", protocol=None,
                  specs=None, msg_cfg=None):
-        """scheduler: "RMS" | "EDF".   ipc: "shared_memory" | "message_passing".
+        """scheduler: "RMS" | "EDF" | "DM" (deadline-monotonic).   ipc: "shared_memory" | "message_passing".
         protocol: "PIP" | "ICPP" | "SRP" | "NONE"/None (shared_memory only; None = plain
         locks, no protocol).  specs: {task_name: [CriticalSection]} (shared_memory).
         msg_cfg: MessagePassingConfig (message_passing; default latency 0).
@@ -218,7 +218,11 @@ class IPCInterface:
         validate_specs(self.tasks, specs)
         if scheduler == "RMS":
             assign_rms_priorities(self.tasks)
-        self._prot = make_protocol(proto, scheduler, specs)   # ValueError for ICPP+EDF etc.
+        elif scheduler == "DM":
+            assign_dm_priorities(self.tasks)
+        # DM is fixed-priority like RMS; only the priority order differs.
+        proto_policy = "RMS" if scheduler == "DM" else scheduler
+        self._prot = make_protocol(proto, proto_policy, specs)   # ValueError for ICPP+EDF etc.
         self._prot.prepare(self.tasks)
         self._state = State()
         self._by_name = {t.name: t for t in self.tasks}
