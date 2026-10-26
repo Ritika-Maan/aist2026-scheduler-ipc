@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "time_unit": "ms",
+    "base_seed": 2026,
+    "n_task_sets": 500,
+    "n_tasks": 6,
+    "period_grid": [80, 112, 140, 160, 224, 280, 320, 448, 560, 640, 896, 1120],
+    "baseline_latency": 0.01,
+    "intensity": {
+      "high": {
+        "n_resources": 2,
+        "cs_per_job": 4,
+        "cs_fraction": 0.3,
+        "msgs_per_job": 4
+      }
+    }
+  },
+  "conditions": [
+    {"id": "n500_0.9_RMS_shared_memory", "scheduler": "RMS", "ipc": "shared_memory", "utilization": 0.9, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.9_RMS_message_passing", "scheduler": "RMS", "ipc": "message_passing", "utilization": 0.9, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.9_EDF_shared_memory", "scheduler": "EDF", "ipc": "shared_memory", "utilization": 0.9, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.9_EDF_message_passing", "scheduler": "EDF", "ipc": "message_passing", "utilization": 0.9, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.95_RMS_shared_memory", "scheduler": "RMS", "ipc": "shared_memory", "utilization": 0.95, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.95_RMS_message_passing", "scheduler": "RMS", "ipc": "message_passing", "utilization": 0.95, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.95_EDF_shared_memory", "scheduler": "EDF", "ipc": "shared_memory", "utilization": 0.95, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.95_EDF_message_passing", "scheduler": "EDF", "ipc": "message_passing", "utilization": 0.95, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.98_RMS_shared_memory", "scheduler": "RMS", "ipc": "shared_memory", "utilization": 0.98, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.98_RMS_message_passing", "scheduler": "RMS", "ipc": "message_passing", "utilization": 0.98, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.98_EDF_shared_memory", "scheduler": "EDF", "ipc": "shared_memory", "utilization": 0.98, "intensity": "high", "d_factor": 1.0},
+    {"id": "n500_0.98_EDF_message_passing", "scheduler": "EDF", "ipc": "message_passing", "utilization": 0.98, "intensity": "high", "d_factor": 1.0}
+  ]
+}
