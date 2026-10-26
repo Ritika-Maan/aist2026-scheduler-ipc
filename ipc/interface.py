@@ -49,7 +49,7 @@ from messaging import (AsyncMessageChannel,               # noqa: E402
                        MessagePassingConfig, message_overhead)
 
 SCHEDULERS = ("RMS", "EDF", "DM")
-IPC_MODES = ("shared_memory", "message_passing")
+IPC_MODES = ("shared_memory", "message_passing", "sync_message")
 
 
 @dataclass(frozen=True)
@@ -203,6 +203,14 @@ class IPCInterface:
                 raise ValueError("critical-section specs apply to shared_memory only")
             msg_cfg = msg_cfg or MessagePassingConfig()
             self.channel = AsyncMessageChannel(msg_cfg)
+        elif ipc == "sync_message":
+            if proto != "NONE":
+                raise ValueError("sync_message uses no locking protocol (protocol=None)")
+            if specs:
+                raise ValueError("critical-section specs apply to shared_memory only")
+            if msg_cfg is not None:
+                raise ValueError("msg_cfg applies to message_passing only")
+            self.channel = None
         else:
             if msg_cfg is not None:
                 raise ValueError("msg_cfg applies to message_passing only")
@@ -232,6 +240,9 @@ class IPCInterface:
         self._last = {}
         self.message_log = []
         self.deadlock_time = None
+        self._sync_wait = {}     # receiver_name -> [(blocked sender job, send_time)]
+        self._recv_wait = {}     # receiver_name -> job waiting at its receive
+        self._sync_target = {}   # blocked sender task name -> receiver task name
 
     # ------------------------------------------------------------ job lifecycle
     def on_job_release(self, task_name, release):
@@ -383,6 +394,70 @@ class IPCInterface:
     def dropped_messages(self):
         return sum(m.dropped for m in self.message_log)
 
+    # ------------------------------------------------------------ synchronous (rendezvous) messages
+    def on_sync_send(self, sender_name, release, receiver_name, time):
+        """Rendezvous send. True: receiver was already waiting, accepted now, sender
+        keeps running. False: sender is blocked until the receiver reaches its receive;
+        `deadlock` becomes True if that closes a wait cycle."""
+        if self.ipc != "sync_message":
+            raise RuntimeError("on_sync_send requires ipc='sync_message'")
+        job = self._pending(sender_name, release)
+        if receiver_name not in self._by_name:
+            raise KeyError(f"unknown receiver task {receiver_name!r}")
+        if job.blocked_on is not None:
+            raise RuntimeError(f"job {(sender_name, release)} is already blocked")
+        if job.start is None:
+            job.start = time
+        rjob = self._recv_wait.pop(receiver_name, None)
+        if rjob is not None:                      # receiver already waiting
+            rjob.blocked_on = None
+            self._log_sync(job, receiver_name, time, time)
+            return True
+        job.blocked_on = "sync:" + receiver_name
+        self._sync_wait.setdefault(receiver_name, []).append((job, time))
+        self._sync_target[sender_name] = receiver_name
+        if self._sync_cycle(sender_name):
+            self._state.deadlock = True
+            if self.deadlock_time is None:
+                self.deadlock_time = time
+        return False
+
+    def on_sync_receive(self, receiver_name, release, time):
+        """Receive point. Returns (sender_name, release) if a sender was waiting (it is
+        unblocked now). Returns None if the receiver must wait: it is blocked until a
+        sender arrives."""
+        if self.ipc != "sync_message":
+            raise RuntimeError("on_sync_receive requires ipc='sync_message'")
+        job = self._pending(receiver_name, release)
+        if job.blocked_on is not None:
+            raise RuntimeError(f"job {(receiver_name, release)} is already blocked")
+        if job.start is None:
+            job.start = time
+        queue = self._sync_wait.get(receiver_name)
+        if queue:
+            sender, t_send = queue.pop(0)
+            sender.blocked_on = None
+            self._sync_target.pop(sender.task.name, None)
+            self._log_sync(sender, receiver_name, t_send, time)
+            return (sender.task.name, sender.release)
+        job.blocked_on = "sync_recv"
+        self._recv_wait[receiver_name] = job
+        return None
+
+    def _sync_cycle(self, sender_name):
+        """True if following 'blocked sender -> its receiver' edges returns to sender_name."""
+        seen, cur = set(), self._sync_target.get(sender_name)
+        while cur is not None and cur not in seen:
+            if cur == sender_name:
+                return True
+            seen.add(cur)
+            cur = self._sync_target.get(cur)
+        return False
+
+    def _log_sync(self, sender, receiver_name, t_send, t_accept):
+        self.message_log.append(MessageResult(sender.task.name, receiver_name, sender.release,
+                                              t_send, t_accept, t_accept - t_send, 0, False))
+
     # ------------------------------------------------------------ results / state
     @property
     def blocking_events(self):
@@ -443,6 +518,8 @@ class IPCInterface:
 
     def _cause(self, waiting, running):
         st, prot = self._state, self._prot
+        if isinstance(waiting.blocked_on, str) and waiting.blocked_on.startswith("sync"):
+            return "rendezvous", waiting.blocked_on.split(":", 1)[-1]
         if waiting.blocked_on is not None:
             return "lock", waiting.blocked_on
         held = [r for r, h in st.holder.items() if h is running]
