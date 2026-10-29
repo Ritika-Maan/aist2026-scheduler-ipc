@@ -184,7 +184,7 @@ def effective_utilization(tasks, splits=None):
 
 class IPCInterface:
     def __init__(self, tasks, scheduler, ipc="shared_memory", protocol=None,
-                 specs=None, msg_cfg=None):
+                 specs=None, msg_cfg=None, sync_specs=None):
         """scheduler: "RMS" | "EDF" | "DM" (deadline-monotonic).   ipc: "shared_memory" | "message_passing".
         protocol: "PIP" | "ICPP" | "SRP" | "NONE"/None (shared_memory only; None = plain
         locks, no protocol).  specs: {task_name: [CriticalSection]} (shared_memory).
@@ -241,8 +241,11 @@ class IPCInterface:
         self.message_log = []
         self.deadlock_time = None
         self._sync_wait = {}     # receiver_name -> [(blocked sender job, send_time)]
-        self._recv_wait = {}     # receiver_name -> job waiting at its receive
-        self._sync_target = {}   # blocked sender task name -> receiver task name
+        self._recv_wait = {}     # receiver_name -> [jobs waiting at their receive]
+        if sync_specs and ipc != "sync_message":
+            raise ValueError("sync_specs apply to sync_message only")
+        self._msg_specs = self._check_sync_specs(sync_specs or {})
+        self._msg_idx = {}       # (task_name, release) -> index of the next send/recv
 
     # ------------------------------------------------------------ job lifecycle
     def on_job_release(self, task_name, release):
@@ -408,14 +411,14 @@ class IPCInterface:
             raise RuntimeError(f"job {(sender_name, release)} is already blocked")
         if job.start is None:
             job.start = time
-        rjob = self._recv_wait.pop(receiver_name, None)
-        if rjob is not None:                      # receiver already waiting
+        waiting = self._recv_wait.get(receiver_name)
+        if waiting:                               # a receiver job is already waiting
+            rjob = waiting.pop(0)
             rjob.blocked_on = None
             self._log_sync(job, receiver_name, time, time)
             return True
         job.blocked_on = "sync:" + receiver_name
         self._sync_wait.setdefault(receiver_name, []).append((job, time))
-        self._sync_target[sender_name] = receiver_name
         if self._sync_cycle(sender_name):
             self._state.deadlock = True
             if self.deadlock_time is None:
@@ -437,21 +440,71 @@ class IPCInterface:
         if queue:
             sender, t_send = queue.pop(0)
             sender.blocked_on = None
-            self._sync_target.pop(sender.task.name, None)
             self._log_sync(sender, receiver_name, t_send, time)
             return (sender.task.name, sender.release)
         job.blocked_on = "sync_recv"
-        self._recv_wait[receiver_name] = job
+        self._recv_wait.setdefault(receiver_name, []).append(job)
         return None
 
-    def _sync_cycle(self, sender_name):
-        """True if following 'blocked sender -> its receiver' edges returns to sender_name."""
-        seen, cur = set(), self._sync_target.get(sender_name)
-        while cur is not None and cur not in seen:
-            if cur == sender_name:
+    def next_msg_point(self, task_name, release):
+        """Next send/recv of the job as (offset, kind, target), or None."""
+        pts = self._msg_specs.get(task_name, [])
+        i = self._msg_idx.get((task_name, release), 0)
+        return pts[i] if i < len(pts) else None
+
+    def fire_msg_points(self, task_name, release, time):
+        """Fire every send/recv the job has reached (CPU time executed >= offset).
+        True if any fired. Stops as soon as the job blocks or a deadlock is found."""
+        key = (task_name, release)
+        fired = False
+        while True:
+            pt = self.next_msg_point(*key)
+            if pt is None or pt[0] > self.executed(*key) + EPS:
+                return fired
+            fired = True
+            self._msg_idx[key] = self._msg_idx.get(key, 0) + 1
+            _, kind, target = pt
+            if kind == "send":
+                blocked = not self.on_sync_send(task_name, release, target, time)
+            else:
+                blocked = self.on_sync_receive(task_name, release, time) is None
+            if blocked or self.deadlock:
+                return fired
+
+    def _check_sync_specs(self, sync_specs):
+        """{task_name: [(offset, "send"|"recv", target)]} -> sorted, validated copy.
+        offset = CPU time the job has executed when it reaches the call (0 <= offset < wcet).
+        target = receiving task for "send"; None for "recv"."""
+        out = {}
+        for name, pts in sync_specs.items():
+            if name not in self._by_name:
+                raise KeyError(f"sync_specs: unknown task {name!r}")
+            wcet = self._by_name[name].wcet
+            for off, kind, target in pts:
+                if kind not in ("send", "recv"):
+                    raise ValueError(f"{name}: kind must be 'send' or 'recv', not {kind!r}")
+                if not (-EPS <= off < wcet - EPS):
+                    raise ValueError(f"{name}: offset {off} must satisfy 0 <= offset < wcet ({wcet})")
+                if kind == "send" and (target not in self._by_name or target == name):
+                    raise ValueError(f"{name}: send target {target!r} must be another task")
+            out[name] = sorted(pts, key=lambda p: p[0])
+        return out
+
+    def _sync_cycle(self, start):
+        """True if blocked senders form a wait cycle through task `start`."""
+        edges = {}
+        for rcv, waiting in self._sync_wait.items():
+            for sjob, _ in waiting:
+                edges.setdefault(sjob.task.name, set()).add(rcv)
+        seen, stack = set(), list(edges.get(start, ()))
+        while stack:
+            cur = stack.pop()
+            if cur == start:
                 return True
+            if cur in seen:
+                continue
             seen.add(cur)
-            cur = self._sync_target.get(cur)
+            stack.extend(edges.get(cur, ()))
         return False
 
     def _log_sync(self, sender, receiver_name, t_send, t_accept):

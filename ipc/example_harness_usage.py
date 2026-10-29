@@ -52,13 +52,14 @@ def _fire_sync_points(api, key, time):
 
 
 def run_cosim(tasks, scheduler, ipc="shared_memory", protocol=None, specs=None,
-              horizon=100.0, msg_cfg=None, msgs_per_job=0, check_select=False):
+              horizon=100.0, msg_cfg=None, msgs_per_job=0, check_select=False,
+              sync_specs=None):
     """Returns {"jobs": [IPCJob], "deadlock": bool, "api": IPCInterface}."""
     tasks = list(tasks)
     if ipc == "message_passing":                  # overhead goes into WCET, latency from config
         msg_cfg = msg_cfg or MessagePassingConfig()
         tasks = inflate_wcet(tasks, msgs_per_job, msg_cfg)
-    api = IPCInterface(tasks, scheduler, ipc, protocol, specs, msg_cfg)
+    api = IPCInterface(tasks, scheduler, ipc, protocol, specs, msg_cfg, sync_specs)
     names = [t.name for t in api.tasks]
     next_stage = {n: names[(i + 1) % len(names)] for i, n in enumerate(names)}  # pipeline order
 
@@ -84,6 +85,9 @@ def run_cosim(tasks, scheduler, ipc="shared_memory", protocol=None, specs=None,
 
         cands = [k for k in api.pending() if api.can_dispatch(*k, time)]   # 2. dispatch
         if not cands:
+            if ipc == "sync_message" and i < len(releases):
+                time = max(time, releases[i][0])   # receivers waiting for a later release
+                continue
             api.report_no_dispatchable(time)
             break
         chosen = min(cands, key=lambda k: api.effective_key(*k, time))
@@ -91,7 +95,10 @@ def run_cosim(tasks, scheduler, ipc="shared_memory", protocol=None, specs=None,
             assert api.select(time) == chosen, "select() disagrees with can_dispatch/effective_key"
 
         api.on_job_start(*chosen, time)                             # 3. lock events
-        if _fire_sync_points(api, chosen, time):
+        fired = _fire_sync_points(api, chosen, time)
+        if ipc == "sync_message":
+            fired = api.fire_msg_points(*chosen, time) or fired
+        if fired:
             if api.deadlock:
                 break
             continue
@@ -99,10 +106,15 @@ def run_cosim(tasks, scheduler, ipc="shared_memory", protocol=None, specs=None,
         next_rel = releases[i][0] if i < len(releases) else math.inf   # 4. run a segment
         sp = api.next_sync_point(*chosen)
         next_ev = sp.offset - api.executed(*chosen) if sp else math.inf
+        mp = api.next_msg_point(*chosen) if ipc == "sync_message" else None
+        if mp:
+            next_ev = min(next_ev, mp[0] - api.executed(*chosen))
         run = min(api.remaining(*chosen), next_rel - time, next_ev)
         api.record_run(*chosen, time, time + run)
         time += run
         _fire_sync_points(api, chosen, time)
+        if ipc == "sync_message":
+            api.fire_msg_points(*chosen, time)
         if api.deadlock:
             break
         if api.remaining(*chosen) <= EPS:
